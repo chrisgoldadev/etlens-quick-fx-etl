@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.env
+.env.*
+
+# VS Code
+.vscode/
+
+# Dane i artefakty
+data/*.csv
+data/*.parquet
+data/*.json
+!data/.gitkeep
+dashboard.html
+
+# System
+.DS_Store
+Thumbs.db
