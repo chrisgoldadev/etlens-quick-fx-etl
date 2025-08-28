@@ -1,0 +1,81 @@
+name: Publish Dashboard
+
+on:
+  workflow_dispatch: {}            # ręczne odpalenie
+  schedule:
+    - cron: "0 6 * * *"           # codziennie o 06:00 UTC (~08:00 czasu PL)
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+
+      # (Opcjonalnie) spróbuj pobrać poprzednią historię z gałęzi gh-pages
+      - name: Checkout gh-pages (if exists)
+        id: ghp
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: gh-pages
+
+      - name: Restore history file from gh-pages (if present)
+        run: |
+          if [ -f gh-pages/data/history_eur_base.csv ]; then
+            mkdir -p data
+            cp gh-pages/data/history_eur_base.csv data/history_eur_base.csv
+            echo "Restored history from gh-pages."
+          else
+            echo "No previous history found on gh-pages."
+          fi
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: pip install -r requirements.txt
+
+      # Jeśli to pierwszy raz i nie ma historii -> zrób backfill 90 dni
+      - name: Build/Update data + dashboard
+        run: |
+          if [ ! -f data/history_eur_base.csv ]; then
+            echo "No history file -> running 90d backfill once."
+            python backfill_90d.py
+          fi
+          python main.py
+
+      - name: Prepare site artifact
+        run: |
+          mkdir -p site/data
+          cp dashboard.html site/index.html
+          cp -r data/*.csv site/data/ || true
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
